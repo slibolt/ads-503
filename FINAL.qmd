@@ -1,0 +1,857 @@
+---
+title: "Data Cleaning & EDA"
+author: "Jimmy Hwang & Sasha Libolt"
+format: pdf
+editor: visual
+---
+
+# SETUP
+
+## Libraries
+
+```{r, warning = FALSE, message = FALSE}
+library(haven)
+library(caret)
+library(tidyverse)
+library(dplyr)
+library(dlookr)
+library(naniar)
+library(explore)
+library(corrr)
+library(gt)
+library(pROC)
+rseed = 100
+```
+
+## Load Data
+
+```{r}
+file_path <- "~/Desktop/df.XPT"
+brfss_orig <- read_xpt(file_path)
+```
+
+# DATA CLEANING
+
+## Drop 2024 Data
+
+```{r}
+#drop anything that is not 2023
+df_drop_24 <- brfss_orig[ brfss_orig$IYEAR == 2023, ] #drop rows
+```
+
+## Explore Outcome Variable
+
+```{r}
+#explore outcome variable, diabetes
+table(df_drop_24$DIABETE4, useNA = "ifany")
+```
+
+DIABETE4 values are explained in the table below. Drop any row that is not a "1" for Yes or a "3" for No.
+
++----------------------+----------------------------------------------------------------------+----------------------+
+| Value                | Value Label                                                          | Frequency            |
++:====================:+:====================================================================:+:====================:+
+| 1                    | Yes                                                                  | 56,282               |
++----------------------+----------------------------------------------------------------------+----------------------+
+| 2                    | Yes, but female told only during pregnancy - Go to Section 08.01 AGE | 3,089                |
++----------------------+----------------------------------------------------------------------+----------------------+
+| 3                    | No - Go to Section 08.01 AGE                                         | 337,785              |
++----------------------+----------------------------------------------------------------------+----------------------+
+| 4                    | No, pre-diabetes or borderline diabetes - Go to Section 08.01 AGE    | 9,934                |
++----------------------+----------------------------------------------------------------------+----------------------+
+| 7                    | Don't know/Not Sure - Go to Section 08.01 AGE                        | 640                  |
++----------------------+----------------------------------------------------------------------+----------------------+
+| 9                    | Refused - Go to Section 08.01 AGE                                    | 277                  |
++----------------------+----------------------------------------------------------------------+----------------------+
+| BLANK                | Not asked or Missing                                                 | 5                    |
++----------------------+----------------------------------------------------------------------+----------------------+
+
+```{r}
+df_drop_diabetes <- df_drop_24 %>%
+  filter(DIABETE4 %in% c(1, 3))
+dqr_start <- diagnose(df_drop_diabetes)
+```
+
+## Drop Columns Missing 10% or More
+
+```{r}
+#identify what has more than 10% missing
+high_missing <- dqr_start %>%
+  filter(missing_percent >= 10) %>%
+  select(variables, missing_percent)
+
+high_missing_col <- high_missing$variables #get all the high missing in the dataframe
+#ensure that Diabtype & diabetes are not included in the list
+high_missing_col <- setdiff(high_missing_col, c("DIABETE4", "DIABTYPE"))
+df_drop_miss <- df_drop_diabetes[ , !(names(df_drop_diabetes) %in% high_missing_col)]
+dqr_10_drop <- diagnose(df_drop_miss)
+```
+
+## Drop Noisy Columns / Don't Have Explanatory Value
+
+```{r}
+#drop columns that are noise / don't add value
+noise_to_drop <- c(
+  # related to phone information
+  "_DUALUSE",    
+  "_LLCPWT",    
+  "_LLCPWT2",    
+  "CPDEMO1C",
+  "QSTVER", 
+  #related to survey identifcation information
+  "_PSU", 
+  "_RAWRAKE", 
+  "_STRWT", 
+  "_STSTR", 
+  "_WT2RAKE", 
+  "FMONTH", 
+  "IDATE", 
+  "IDAY", 
+  "IMONTH", 
+  "IYEAR", 
+  "SEQNO",
+  #related to seatbelt use
+  "_RFSEAT2", 
+  "_RFSEAT3", 
+  "SEATBELT"
+)
+df_drop_noise <- df_drop_miss[ , !(names(df_drop_miss) %in% noise_to_drop)]
+dqr_noise_drop <- diagnose(df_drop_noise)
+```
+
+## Drop Duplicate Columns
+
+#Look at columns that are duplicates of each other and determine which one to choose. Decisions were made based on data quality, data granularity and information that could be found.
+
+### Age Variables
+
+Chose to use \_AGE80 as it is the actual numerical value.
+
+```{r}
+age_vars <- c(
+  "_AGE_G", "_AGE65YR", "_AGE80", "_AGEG5YR"
+)
+
+for (varname in age_vars) {
+  # Print a header line
+  cat("----", varname, "----\n")
+  
+  # Use get() to extract the column by name
+ print(table(df_drop_noise[[varname]], useNA = "ifany"))
+  
+  # Add a blank line for spacing
+  cat("\n")
+}
+```
+
+### Alcohol Variables
+
+Chose \_DRINKWK as it is a numerical quantification with best quality.
+
+```{r}
+alcohol_vars <- c(
+  "_DRNKWK2", "_RFBING6", "_RFDRHV8",  "DRNKANY6", "DROCDY4_" 
+) #ALCDAY4 not included as it has high level of nulls
+
+for (varname in alcohol_vars) {
+  # Print a header line
+  cat("----", varname, "----\n")
+  
+  # Use get() to extract the column by name
+  print(table(df_drop_noise[[varname]], useNA = "ifany"))
+  
+  # Add a blank line for spacing
+  cat("\n")
+}
+```
+
+### Arthritis Variables
+
+Chose to use \_DRXAR2 which is a Y/N indicator of arthritis
+
+```{r}
+arth_vars <- c(
+  "_DRDXAR2", "HAVARTH4" 
+) 
+
+for (varname in arth_vars) {
+  # Print a header line
+  cat("----", varname, "----\n")
+  
+  # Use get() to extract the column by name
+  print(table(df_drop_noise[[varname]], useNA = "ifany"))
+  
+  # Add a blank line for spacing
+  cat("\n")
+}
+```
+
+### BMI, Height & Weight
+
+BMI is simply a calculated ration between height and weight so evaluated all these as one to make a final determination. Determined that the best to keep would be \_BMI5CAT as there were significant data quality issues with height and weight indicators.
+
+```{r}
+bmi_h_w_vars <- c(
+  "_BMI5", "_BMI5CAT" , "_RFBMI5", "HEIGHT3", "HTIN4", "HTM4", "WEIGHT2", "WTKG3"
+) 
+
+bmi_h_w_summary <- df_drop_noise [ , bmi_h_w_vars, drop = FALSE] 
+
+dqr_bmi_weight <- diagnose(bmi_h_w_summary)
+
+dqr_bmi_weight
+```
+
+```{r}
+#Bar chart of Obese
+ggplot(df_drop_noise, aes(x = factor(`_RFBMI5`, levels = c(1, 2, 9)))) +
+  geom_bar(na.rm = TRUE, fill = "steelblue") +
+  labs(
+    title = "Counts for _RFBMI5",
+    x     = "_RFBMI5 value",
+    y     = "Count"
+  ) +
+  theme_minimal()
+
+#boxplot of height
+ggplot(df_drop_noise, aes(y = `HEIGHT3`)) +
+  geom_boxplot(na.rm = TRUE,# ignore missing values
+               fill  = "steelblue",
+               width = 0.3) +              
+  labs(
+    title = "Boxplot of Height",
+    y     = "Height"
+  ) +
+  theme_minimal()
+
+
+#histogram of weight
+
+ggplot(df_drop_noise, aes(y = `WEIGHT2`)) +
+  geom_boxplot(na.rm = TRUE,# ignore missing values
+               fill  = "steelblue",
+               width = 0.3) +              
+  labs(
+    title = "Boxplot of Weight",
+    y     = "Weight"
+  ) +
+  theme_minimal()
+```
+
+### Diabetes Type
+
+Diabetes type is potentially useful if we can narrow down between Type I and Type II. Investigating any time that DIABETES4 = 1, indicating a "YES" for a diabetic diagnosis the data quality revealed itself to be too poor for usage. Drop DIABTYPE.
+
+```{r}
+df_diab_pos <- df_drop_noise[df_drop_noise$DIABETE4 == 1, ]
+table(df_diab_pos$DIABTYPE, useNA = "ifany")
+```
+
++----------+--------------------------------------------------------------------+-----------+
+| Value    | Value Label                                                        | Frequency |
++:========:+:==================================================================:+:=========:+
+| 1        | Type 1                                                             | 1,821     |
++----------+--------------------------------------------------------------------+-----------+
+| 2        | Type 2                                                             | 18,804    |
++----------+--------------------------------------------------------------------+-----------+
+| 7        | Don't know/Not Sure                                                | 2021      |
++----------+--------------------------------------------------------------------+-----------+
+| 9        | Refused                                                            | 49        |
++----------+--------------------------------------------------------------------+-----------+
+| BLANK    | Not asked or Missing\                                              | 35,587    |
+|          | Notes: Section 07.12, DIABETE4, is coded 2, 3, 4, 7, 9, or Missing |           |
++----------+--------------------------------------------------------------------+-----------+
+
+### Duplicate Column Removal
+
+Besides the analysis above, some duplicate decisions were made between two columns based on which one provided the most information. Final removal list is below:
+
+```{r}
+columns_to_drop <- c(
+  # AGE
+  "_AGEG5YR", "_AGE_G", "_AGE65YR",
+  
+  # ALCOHOL
+  "ALCDAY4", "_RFBING6", "_RFDRHV8", "DRNKANY6", "DROCDY4_", "_DRNKDRV",
+  
+  # Arthritis
+  "HAVARTH4",
+  
+  # BMI, Height, Weight
+  "_BMI5", "_BMI5CAT", "HTIN4", "WTKG3", "HTM4", "HEIGHT3", "WEIGHT2",
+  
+  # Physical fitness
+  "_PA150R4", "_PA30023", "_PA300R4", "_PAINDX3", "_PAREC3",
+  "_PASTAE3", "_PASTRNG", "_PHYS14D", "_TOTINDA", "EXERANY2",
+  "PAMISS3_", "STRENGTH", "STRFREQ_",
+  
+  # Race
+  "_HISPANC", "_MRACE1", "_RACE", "_RACEG21", "_RACEGR3", "_RACEPRV",
+  
+  # Smoking
+  "_RFSMOK3", "ECIGNOW2", "SMOKE100", "USENOW3", "_CURECI2",
+  
+  # Mental Health
+  "_MENT14D", "MENTHLTH",
+  
+  # Asthma
+  "_CASTHM1", "_LTASTH1", "ASTHMA3",
+  
+  # Heart
+  "CVDCRHD4", "CVDINFR4",
+  
+  # Insurance
+  "HCVU653", "PRIMINS1",
+  
+  # Miscellaneous
+  "_CHLDCNT", "CHOLCHK3", "EDUCAG", "_SEX", "_INCOMG1", "HIVTST7", "BPHIGH6", "GENHLTH", 
+  "DIABTYPE", "_EDUCAG"
+)
+df_drop_dupe <- df_drop_noise %>%
+  select(-any_of(columns_to_drop))
+dqr_drop_dupe <- diagnose(df_drop_dupe)
+```
+
+## Convert Categorical Variables to Factors
+
+```{r}
+factor_cols <- dqr_drop_dupe %>%
+  filter(unique_count <= 10) %>%
+  pull(variables)
+
+df_convert_factor <- df_drop_dupe %>%
+  mutate(across(all_of(factor_cols), as.factor))
+dqr_convert_factor <- diagnose(df_convert_factor)
+```
+
+## Statistical Testing for Feature Importance
+
+### Cramer's V for Categorical Variables
+
+Cramer's V is the a measure of relationship between categorical variables, 1 being perfect and 0 being no relationship.
+
+```{r}
+library(vcd)  
+# Get all factor predictors (excluding the outcome)
+factor_vars <- df_convert_factor %>%
+  select(where(is.factor)) %>%
+  select(-DIABETE4) %>%
+  names()
+
+# Loop through and run chi-square + cramer v, dropping NAs 
+chi_results <- map_dfr(factor_vars, function(var) {
+  
+  # Drop rows where null
+ temp_data <- df_convert_factor %>%
+    select(all_of(var), DIABETE4) %>%
+    filter(!is.na(.data[[var]]))
+  
+  # Create contingency table
+  tbl <- table(temp_data[[var]], temp_data$DIABETE4)
+  
+  # Run chi-square test and get cramer v
+  if (nrow(tbl) > 1 && ncol(tbl) > 1) {
+    test <- suppressWarnings(chisq.test(tbl))
+    cramers_v <- suppressWarnings(assocstats(tbl)$cramer)
+    tibble(variable = var, p_value = test$p.value, cramers_v = cramers_v)
+  } else {
+    tibble(variable = var, p_value = NA, cramers_v = NA)
+  }
+}) %>%
+  filter(!is.na(p_value)) %>%
+  arrange(desc(cramers_v))
+
+# View results
+head(chi_results, 10)
+```
+
+```{r}
+chi_results <- chi_results %>%
+  mutate(selection = case_when(
+    p_value >= 0.05 ~ "Drop",
+   cramers_v >= 0.10 ~ "Keep",
+   cramers_v >= 0.05 & cramers_v < 0.10 ~ "Maybe",
+    TRUE ~ "Drop"
+  ))
+chi_results %>%
+  count(selection)
+```
+
+```{r}
+#extract all the drops
+cat_drop <- chi_results %>%
+  filter(selection == "Drop") %>%
+  pull(variable)
+
+# View the list
+cat_drop
+```
+
+### Pearson's Correlation for Numerical
+
+```{r}
+#convert outcome to binary numerical for now
+df_numeric <- df_convert_factor %>%
+  mutate(diabetes_binary = ifelse(DIABETE4 == "1", 1, 0))
+
+#get mumeric vars
+numeric_vars <- df_numeric %>%
+  select(where(is.numeric)) %>%
+  select(-diabetes_binary) %>%
+  names() # remove outcome column
+
+#run pearson correlation
+cor_results <- map_dfr(numeric_vars, function(var) {
+  test <- cor.test(df_numeric[[var]], df_numeric$diabetes_binary, use = "complete.obs")
+  tibble(
+    variable = var,
+    correlation = test$estimate,
+    p_value = test$p.value,
+    abs_correlation = abs(test$estimate)
+  )
+}) %>%
+  arrange(desc(abs_correlation))
+head(cor_results, 10)
+```
+
+```{r}
+cor_results <- cor_results %>%
+  mutate(selection = case_when(
+    p_value >= 0.05 ~ "Drop",
+   abs_correlation >= 0.10 ~ "Keep",
+   abs_correlation >= 0.05 & abs_correlation < 0.10 ~ "Maybe",
+    TRUE ~ "Drop"
+  ))
+cor_results %>%
+  count(selection)
+```
+
+```{r}
+#extract all the drops
+num_drop  <- cor_results %>%
+  filter(selection == "Drop") %>%
+  pull(variable)
+
+# View the list
+num_drop 
+```
+
+### Drop Insignificant Columns
+
+```{r}
+#combine cat and num drops
+all_drop <- c(cat_drop, num_drop)
+#drop columns
+df_insig_drop <- df_convert_factor %>%
+  select(-all_of(all_drop))
+dqr_start <- diagnose(df_insig_drop)
+```
+
+## Explore Missing Data
+
+```{r}
+ggplot(dqr_start, aes(
+       x = reorder(variables, missing_percent), 
+       y = missing_percent
+     )) +
+  geom_col(fill = "tomato") +
+  coord_flip() +                               
+  labs(
+    title = "Percentage Missing by Column Before Drop",
+    x     = "Variable (sorted by missing %)",
+    y     = "Missing Percent"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 6),
+    axis.title  = element_text(size = 10),
+    plot.title  = element_text(size = 12, face = "bold")
+  )
+```
+
+```{r}
+#drop all nulls
+df_drop_null <- df_insig_drop %>%
+  drop_na()
+```
+
+```{r}
+diagnose(df_drop_null)
+```
+
+```{r}
+#get numeric varibles
+numeric_final <- df_drop_null[, sapply(df_drop_null, is.numeric)]
+
+par(mfrow = c(2, 2))  
+
+for (var_name in names(numeric_final)) {
+  boxplot(numeric_final[[var_name]],
+          main = paste("Boxplot of", var_name),
+          horizontal = TRUE,
+          col = "lightblue")
+}
+
+```
+
+```{r}
+summary(df_drop_null$PHYSHLTH)
+summary(df_drop_null$CHILDREN)
+summary(df_drop_null$'_AGE80')
+```
+
+PHYSHLTH 1-30 is number of days. "88" means none,"77" mean's don't know. 99 means refused. Turn 88 to "0", drop 77, drop 99.
+
+```{r}
+#convert 88 to 0
+df_convert80 <- df_drop_null %>%
+  mutate(PHYSHLTH = ifelse(PHYSHLTH == 88, 0, PHYSHLTH))
+df_drop_phys <- df_convert80 %>%
+  filter(!(PHYSHLTH %in% c(77, 99)))
+```
+
+Children 1 - 87 means number of children, 88 means none, 99 means refused.
+
+```{r}
+df_child_88 <- df_drop_phys %>%
+  mutate(CHILDREN = ifelse(CHILDREN == 88, 0, PHYSHLTH))
+plot(density(df_child_88$CHILDREN, na.rm = TRUE), main = "Density Plot")
+```
+
+```{r}
+children_pivot <- as.data.frame(table(df_child_80$CHILDREN))
+colnames(children_pivot) <- c("CHILDREN", "count")
+children_pivot
+```
+
+Unlikely that people have 30 children. Most common distribution is between 0 - 5 children. There is an unusual spike at 15 (1,581 cases) and 30 children (4,612) suggesting a placeholder. Will drop anything less than 10.
+
+```{r}
+sum(df_child_88$CHILDREN > 10, na.rm = TRUE)
+```
+
+```{r}
+df_clean <- df_child_88[df_child_88$CHILDREN <= 10, ]
+# Create a folder if it doesn't exist
+if (!dir.exists("data_files")) dir.create("data_files")
+
+# Save the dataframe as CSV
+write.csv(df_clean, "data_files/df_clean.csv", row.names = FALSE)
+```
+
+```{r}
+df_clean %>% explore()
+```
+
+# DATA PRE-PROCESSING
+
+## Feature Engineering
+
+### Convert Outcome DIABETE4 to "Yes" or "No"
+
+```{r}
+df_clean <- read.csv("df_clean.csv")
+
+df_clean <- df_clean %>%
+  mutate(
+    DIABETE4 = case_when(
+      DIABETE4 == 1 ~ "Yes",
+      DIABETE4 == 3 ~ "No"
+    )
+  )
+
+# Make DIABETE4 variable a factor
+df_clean$DIABETE4 <- factor(df_clean$DIABETE4, levels = c("No", "Yes"))
+```
+
+### Convert Appropriate Predictors to Factors
+
+```{r}
+cat_vars <- c(
+  "PERSDOC3",   # Personal doctor - Yes/No
+  "CHECKUP1",   # Time since last routine checkup
+  "CVDSTRK3",   # Ever told you had a stroke
+  "CHCOCNC1",   # Ever had any type of cancer
+  "CHCCOPD3",   # Ever told you had COPD
+  "CHCKDNY2",   # Ever told you had kidney disease
+  "MARITAL",    # Marital status
+  "EDUCA",      # Education level
+  "VETERAN3",   # Veteran status
+  "EMPLOY1",    # Employment status
+  "DEAF",       # Deaf/hard of hearing
+  "BLIND",      # Blind/difficulty seeing
+  "DECIDE",     # Difficulty making decisions
+  "DIFFWALK",   # Difficulty walking
+  "DIFFDRES",   # Difficulty dressing
+  "DIFFALON",   # Difficulty being alone
+  "FLUSHOT7",   # Flu shot
+  "PNEUVAC4",   # Pneumonia vaccine
+  "X_IMPRACE",  # Race
+  "X_RFHLTH",   # General health risk status
+  "X_HCVU653",  # Under 65 with healthcare coverage
+  "X_PACAT3",   # Physical activity category
+  "X_RFHYPE6",  # Hypertension risk
+  "X_CHOLCH3",  # Cholesterol check status
+  "X_MICHD",    # Myocardial infarction or CHD
+  "X_ASTHMS1",  # Asthma status
+  "X_DRDXAR2",  # Arthritis diagnosis
+  "X_RFBMI5",   # BMI risk
+  "X_SMOKER3"   # Smoking status
+)
+
+df_clean[cat_vars] <- lapply(df_clean[cat_vars], factor)
+```
+
+## Modeling Preparation
+
+### Check for Near Zero Variance
+
+```{r}
+nzv <- nearZeroVar(df_clean)
+df_clean_nzv <- df_clean[, -nzv]
+```
+
+### Stratified Sampling for Large Data Set
+
+```{r}
+set.seed(rseed)
+df_sampled <- df_clean_nzv %>% sample_frac(size = 0.1, replace = FALSE)
+```
+
+### Train-Test Splitting
+
+```{r}
+set.seed(rseed)
+
+# Extract predictor X and outcome y
+X <- df_sampled[, setdiff(names(df_sampled), "DIABETE4")]
+y <- df_sampled$DIABETE4
+
+# 80-20 split
+train_index <- createDataPartition(y, p = 0.8, list = FALSE)
+trainX <- X[train_index, ]
+trainY <- y[train_index]
+testX <- X[-train_index, ]
+testY <- y[-train_index]
+
+# Dummies + encoding for numeric-only models
+dummies <- dummyVars("~ .", data = trainX)
+trainX_dummies <- predict(dummies, newdata = trainX)
+testX_dummies <- predict(dummies, newdata = testX)
+```
+
+### Pre-processing
+
+```{r}
+set.seed(rseed)
+
+prep <- preProcess(trainX_dummies, method = c("center", "scale"))
+
+# Train-test splits for factor-compatible models
+trainX_trans <- predict(prep, trainX_dummies)
+testX_trans <- predict(prep, testX_dummies)
+```
+
+# MODELING
+
+```{r}
+set.seed(rseed)
+
+ctrl <- trainControl(method = "cv",
+                     summaryFunction = twoClassSummary,
+                     number = 10,
+                     classProbs = TRUE,
+                     savePredictions = TRUE)
+```
+
+## Logistic Regression (LR)
+
+```{r}
+set.seed(rseed)
+
+lrFit <- train(x = trainX_trans,
+               y = trainY,
+               method = "glm",
+               metric = "ROC",
+               trControl = ctrl)
+```
+
+```{r}
+varImp(lrFit)
+```
+
+## Penalized Logistic Regression (PLR)
+
+```{r}
+set.seed(rseed)
+
+plrGrid = expand.grid(
+  alpha = 0.375,
+  lambda = 0.002154435
+)
+
+plrFit <- train(x = trainX_trans,
+                y = trainY,
+                method = "glmnet",
+                tuneGrid = plrGrid,
+                metric = "ROC",
+                trControl = ctrl)
+```
+
+```{r}
+varImp(plrFit)
+```
+
+## Random Forest (RF)
+
+```{r}
+set.seed(rseed)
+
+mtryValues = 4
+
+rfFit <- train(
+  x = trainX,
+  y = trainY,
+  method = "rf",
+  ntree = 500,
+  tuneGrid = data.frame(mtry = mtryValues),
+  metric = "ROC",
+  trControl = ctrl
+)
+```
+
+```{r}
+varImp(rfFit)
+```
+
+## Extreme Gradient Boosting (XGBoost)
+
+```{r}
+xgbGrid <- expand.grid(
+  nrounds = 100,
+  max_depth = 4,
+  eta = 0.1,
+  gamma = 0,
+  colsample_bytree = 0.5,
+  min_child_weight = 1,
+  subsample = 0.7
+)
+
+xgbFit <- train(
+  x = trainX_dummies,
+  y = trainY,
+  method = "xgbTree",
+  trControl = ctrl,
+  tuneGrid = xgbGrid,
+  metric = "ROC"
+)
+```
+
+```{r}
+varImp(xgbFit)
+```
+
+## Neural Network (NN)
+
+```{r}
+set.seed(rseed)
+
+nnGrid <- expand.grid(
+  decay = 0.6,
+  size = 1
+)
+
+nnFit <- train(
+  x = trainX_trans,
+  y = trainY,
+  method = "nnet",
+  tuneGrid = nnGrid,
+  trControl = ctrl,
+  trace = FALSE,
+  maxit = 100,
+  metric = "ROC"
+)
+```
+
+```{r}
+varImp(nnFit)
+```
+
+# RESULTS
+
+## ROC AUC
+
+```{r}
+# Logistic regressiono
+lr_probs <- predict(lrFit, newdata = testX_trans, type = "prob")
+lrRoc <- roc(response = testY,
+             predictor = lr_probs[, "Yes"],
+             levels = rev(levels(testY)))
+
+# Penalized logistic regression
+plr_probs <- predict(plrFit, newdata = testX_trans, type = "prob")
+plrRoc <- roc(response = testY,
+             predictor = plr_probs[, "Yes"],
+             levels = rev(levels(testY)))
+
+# Random forest
+rf_probs <- predict(rfFit, newdata = testX, type = "prob")
+rfRoc <- roc(response = testY,
+             predictor = rf_probs[, "Yes"],
+             levels = rev(levels(testY)))
+
+xgb_probs <- predict(xgbFit, newdata = testX_dummies, type = "prob")
+
+# XGBoost
+xgbRoc <- roc(response = testY,
+             predictor = xgb_probs[, "Yes"],
+             levels = rev(levels(testY)))
+
+# Neural network
+nn_probs <- predict(nnFit, newdata = testX_trans, type = "prob")
+nnRoc <- roc(response = testY,
+             predictor = nn_probs[, "Yes"],
+             levels = rev(levels(testY)))
+
+# Display ROC curves
+par(oma= c(0, 0,1,0))
+plot(lrRoc, col = "red", legacy.axes = TRUE)
+plot(plrRoc, col = "orange", legacy.axes = TRUE, add = TRUE)
+plot(rfRoc, col = "darkgreen", legacy.axes = TRUE, add = TRUE)
+plot(xgbRoc, col = "blue", legacy.axes = TRUE, add = TRUE)
+plot(nnRoc, col = "purple", legacy.axes = TRUE, add = TRUE)
+legend("bottomright",
+       legend = c(
+         paste0("LR  (AUC = ", round(auc(lrRoc), 3), ")"),
+         paste0("PLR (AUC = ", round(auc(plrRoc), 3), ")"),
+         paste0("RF  (AUC = ", round(auc(rfRoc), 3), ")"),
+         paste0("XGB (AUC = ", round(auc(xgbRoc), 3), ")"),
+         paste0("NN  (AUC = ", round(auc(nnRoc), 3), ")")
+       ),
+       col = c("red", "orange", "darkgreen", "blue", "purple"),
+       lwd = 2)
+title(main = "ROC Curves from Different Models", outer = TRUE)
+```
+
+## Confidence Intervals for Cross-Validation
+
+```{r}
+train_metrics <- resamples(list(
+  LR = lrFit,
+  PLR = plrFit,
+  RF = rfFit,
+  XGB = xgbFit,
+  NN = nnFit
+))
+dotplot(train_metrics, metric = "ROC", main = "Confidence Intervals for Repeated CV")
+```
+
+## XGBoost Variable Importance
+
+```{r}
+plot(varImp(xgbFit), top = 10, main = "XGBoost Top 10 Important Variables")
+```
+
+# REFERENCES
+
+Geeks for Geeks (2024). *How to Calculate Cramer's V in R*. GeeksforGeeks. Retrieved June 4, 2025, from <https://www.geeksforgeeks.org/how-to-calculate-cramers-v-in-r/>
