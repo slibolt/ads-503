@@ -20,6 +20,7 @@ library(explore)
 library(corrr)
 library(gt)
 library(pROC)
+library(shiny)
 rseed = 100
 ```
 
@@ -48,23 +49,23 @@ table(df_drop_24$DIABETE4, useNA = "ifany")
 
 DIABETE4 values are explained in the table below. Drop any row that is not a "1" for Yes or a "3" for No.
 
-+----------------------+----------------------------------------------------------------------+----------------------+
-| Value                | Value Label                                                          | Frequency            |
-+:====================:+:====================================================================:+:====================:+
-| 1                    | Yes                                                                  | 56,282               |
-+----------------------+----------------------------------------------------------------------+----------------------+
-| 2                    | Yes, but female told only during pregnancy - Go to Section 08.01 AGE | 3,089                |
-+----------------------+----------------------------------------------------------------------+----------------------+
-| 3                    | No - Go to Section 08.01 AGE                                         | 337,785              |
-+----------------------+----------------------------------------------------------------------+----------------------+
-| 4                    | No, pre-diabetes or borderline diabetes - Go to Section 08.01 AGE    | 9,934                |
-+----------------------+----------------------------------------------------------------------+----------------------+
-| 7                    | Don't know/Not Sure - Go to Section 08.01 AGE                        | 640                  |
-+----------------------+----------------------------------------------------------------------+----------------------+
-| 9                    | Refused - Go to Section 08.01 AGE                                    | 277                  |
-+----------------------+----------------------------------------------------------------------+----------------------+
-| BLANK                | Not asked or Missing                                                 | 5                    |
-+----------------------+----------------------------------------------------------------------+----------------------+
++--------------+----------------------------------------------------------------------+--------------+
+| Value        | Value Label                                                          | Frequency    |
++:============:+:====================================================================:+:============:+
+| 1            | Yes                                                                  | 56,282       |
++--------------+----------------------------------------------------------------------+--------------+
+| 2            | Yes, but female told only during pregnancy - Go to Section 08.01 AGE | 3,089        |
++--------------+----------------------------------------------------------------------+--------------+
+| 3            | No - Go to Section 08.01 AGE                                         | 337,785      |
++--------------+----------------------------------------------------------------------+--------------+
+| 4            | No, pre-diabetes or borderline diabetes - Go to Section 08.01 AGE    | 9,934        |
++--------------+----------------------------------------------------------------------+--------------+
+| 7            | Don't know/Not Sure - Go to Section 08.01 AGE                        | 640          |
++--------------+----------------------------------------------------------------------+--------------+
+| 9            | Refused - Go to Section 08.01 AGE                                    | 277          |
++--------------+----------------------------------------------------------------------+--------------+
+| BLANK        | Not asked or Missing                                                 | 5            |
++--------------+----------------------------------------------------------------------+--------------+
 
 ```{r}
 df_drop_diabetes <- df_drop_24 %>%
@@ -491,7 +492,6 @@ for (var_name in names(numeric_final)) {
           horizontal = TRUE,
           col = "lightblue")
 }
-
 ```
 
 ```{r}
@@ -850,6 +850,172 @@ dotplot(train_metrics, metric = "ROC", main = "Confidence Intervals for Repeated
 
 ```{r}
 plot(varImp(xgbFit), top = 10, main = "XGBoost Top 10 Important Variables")
+```
+
+# RShiny App (XGBoost Model)
+
+```{r}
+xgb_features <- c(
+  "PHYSHLTH", "PERSDOC3.1", "PERSDOC3.2", "PERSDOC3.3", "PERSDOC3.7", "PERSDOC3.9",
+  "CHECKUP1.1", "CHECKUP1.2", "CHECKUP1.3", "CHECKUP1.4", "CHECKUP1.7", "CHECKUP1.8", "CHECKUP1.9",
+  "CHCOCNC1.1", "CHCOCNC1.2", "CHCOCNC1.7", "CHCOCNC1.9",
+  "CHCCOPD3.1", "CHCCOPD3.2", "CHCCOPD3.7", "CHCCOPD3.9",
+  "MARITAL.1", "MARITAL.2", "MARITAL.3", "MARITAL.4", "MARITAL.5", "MARITAL.6", "MARITAL.9",
+  "EDUCA.1", "EDUCA.2", "EDUCA.3", "EDUCA.4", "EDUCA.5", "EDUCA.6", "EDUCA.9",
+  "VETERAN3.1", "VETERAN3.2", "VETERAN3.7", "VETERAN3.9",
+  "EMPLOY1.1", "EMPLOY1.2", "EMPLOY1.3", "EMPLOY1.4", "EMPLOY1.5", "EMPLOY1.6", "EMPLOY1.7", "EMPLOY1.8", "EMPLOY1.9",
+  "DEAF.1", "DEAF.2", "DEAF.7", "DEAF.9",
+  "DECIDE.1", "DECIDE.2", "DECIDE.7", "DECIDE.9",
+  "DIFFWALK.1", "DIFFWALK.2", "DIFFWALK.7", "DIFFWALK.9",
+  "DIFFALON.1", "DIFFALON.2", "DIFFALON.7", "DIFFALON.9",
+  "FLUSHOT7.1", "FLUSHOT7.2", "FLUSHOT7.7", "FLUSHOT7.9",
+  "PNEUVAC4.1", "PNEUVAC4.2", "PNEUVAC4.7", "PNEUVAC4.9",
+  "X_IMPRACE.1", "X_IMPRACE.2", "X_IMPRACE.3", "X_IMPRACE.4", "X_IMPRACE.5", "X_IMPRACE.6",
+  "X_RFHLTH.1", "X_RFHLTH.2", "X_RFHLTH.9",
+  "X_HCVU653.1", "X_HCVU653.2", "X_HCVU653.9",
+  "X_PACAT3.1", "X_PACAT3.2", "X_PACAT3.3", "X_PACAT3.4", "X_PACAT3.9",
+  "X_RFHYPE6.1", "X_RFHYPE6.2", "X_RFHYPE6.9",
+  "X_CHOLCH3.1", "X_CHOLCH3.2", "X_CHOLCH3.3", "X_CHOLCH3.9",
+  "X_MICHD.1", "X_MICHD.2",
+  "X_ASTHMS1.1", "X_ASTHMS1.2", "X_ASTHMS1.3", "X_ASTHMS1.9",
+  "X_DRDXAR2.1", "X_DRDXAR2.2",
+  "X_AGE80",
+  "X_RFBMI5.1", "X_RFBMI5.2", "X_RFBMI5.9",
+  "X_SMOKER3.1", "X_SMOKER3.2", "X_SMOKER3.3", "X_SMOKER3.4", "X_SMOKER3.9"
+)
+
+ui <- fluidPage(
+  titlePanel("XGBoost Diabetes Prediction"),
+
+  sidebarLayout(
+    sidebarPanel(
+      numericInput("age", "Age:", value = 40, min = 18, max = 80),
+      selectInput("hypertension", "Have you been told you have high blood pressure?",
+                  choices = c("Yes", "No", "I don't know")),
+      selectInput("health", "Would you say your health is good or better?",
+                  choices = c("Yes", "No", "I don't know")),
+      selectInput("bmi", "Is your BMI over 25 (overweight or obese)?",
+                  choices = c("Yes", "No", "I don't know")),
+      selectInput("checkup", "When was your last routine checkup?",
+                  choices = c(
+                    "Within past year" = "1",
+                    "Within past 2 years" = "2",
+                    "Within past 5 years" = "3",
+                    "5 or more years ago" = "4",
+                    "Don't know / Not sure" = "7",
+                    "Never" = "8",
+                    "Refused" = "9"
+                  )),
+      selectInput("pneumonia", "Have you ever had a pneumonia vaccine (age 65+)?",
+                  choices = c("Yes" = "1", "No" = "2", "I don't know or prefer not to say" = "9")),
+      selectInput("cholesterol", "Have you had your cholesterol checked in the past 5 years?",
+                  choices = c(
+                    "Yes, within the past 5 years" = "1",
+                    "No, not within the past 5 years" = "2",
+                    "Never had it checked" = "3",
+                    "I don't know or prefer not to say" = "9"
+                  )),
+      selectInput("activity", "What best describes your physical activity level?",
+                  choices = c(
+                    "Highly active" = "1",
+                    "Active" = "2",
+                    "Insufficiently active" = "3",
+                    "Inactive" = "4",
+                    "I don't know" = "9"
+                  )),
+      selectInput("diffwalk", "Do you have serious difficulty walking or climbing stairs?",
+                  choices = c("Yes" = "1", "No" = "2", "I don't know" = "7", "I refuse to answer" = "9")),
+      selectInput("heart", "Have you ever had coronary heart disease or a heart attack?",
+                  choices = c("Yes" = "1", "No" = "2")),
+      selectInput("race", "What is your race/ethnicity?",
+                  choices = c(
+                    "White" = "1",
+                    "Black" = "2",
+                    "Asian" = "3",
+                    "American Indian or Alaska Native" = "4",
+                    "Hispanic" = "5",
+                    "Other" = "6"
+                  )),
+      actionButton("predict", "Predict")
+    ),
+
+    mainPanel(
+      h3("Prediction Result"),
+      verbatimTextOutput("result"),
+      plotOutput("probGauge"),
+      plotOutput("topInputsBar"),
+      plotOutput("confidenceBar"),
+      plotOutput("featureImportance")
+    )
+  )
+)
+
+server <- function(input, output) {
+  observeEvent(input$predict, {
+    tryCatch({
+      newdata <- as.data.frame(matrix(0, nrow = 1, ncol = length(xgb_features)))
+      colnames(newdata) <- xgb_features
+      newdata$X_AGE80 <- input$age
+
+      # Hypertension
+      if (input$hypertension == "Yes") newdata$X_RFHYPE6.2 <- 1
+      else if (input$hypertension == "No") newdata$X_RFHYPE6.1 <- 1
+      else newdata$X_RFHYPE6.9 <- 1
+
+      # Health
+      if (input$health == "Yes") newdata$X_RFHLTH.1 <- 1
+      else if (input$health == "No") newdata$X_RFHLTH.2 <- 1
+      else newdata$X_RFHLTH.9 <- 1
+
+      # BMI
+      if (input$bmi == "Yes") newdata$X_RFBMI5.2 <- 1
+      else if (input$bmi == "No") newdata$X_RFBMI5.1 <- 1
+      else newdata$X_RFBMI5.9 <- 1
+
+      # Checkup
+      newdata[[paste0("CHECKUP1.", input$checkup)]] <- 1
+
+      # Pneumonia
+      newdata$PNEUVAC4.7 <- 0
+      newdata[[paste0("PNEUVAC4.", input$pneumonia)]] <- 1
+
+      # Cholesterol
+      if (input$cholesterol == "1") newdata$X_CHOLCH3.1 <- 1
+      else if (input$cholesterol == "2") newdata$X_CHOLCH3.2 <- 1
+      else if (input$cholesterol == "3") newdata$X_CHOLCH3.3 <- 1
+      else if (input$cholesterol == "9") newdata$X_CHOLCH3.9 <- 1
+
+      # Activity
+      newdata[[paste0("X_PACAT3.", input$activity)]] <- 1
+
+      # Difficulty walking
+      newdata[[paste0("DIFFWALK.", input$diffwalk)]] <- 1
+
+      # CHD/MI
+      if (input$heart == "1") newdata$X_MICHD.1 <- 1
+      else newdata$X_MICHD.2 <- 1
+
+      # Race/Ethnicity
+      newdata[[paste0("X_IMPRACE.", input$race)]] <- 1
+
+      # Predict
+      pred <- predict(xgbFit, newdata = newdata, type = "prob")
+      output$result <- renderPrint({
+        list(
+          Inputs = newdata[, colnames(newdata)[which(newdata == 1, arr.ind = TRUE)[, "col"]]],
+          Probability = round(pred, 4),
+          Predicted_Class = ifelse(pred[, "Yes"] > 0.5, "Yes", "No")
+        )
+      })
+    }, error = function(e) {
+      output$result <- renderPrint({
+        paste("Prediction error:", e$message)
+      })
+    })
+  })
+}
+
+shinyApp(ui = ui, server = server)
 ```
 
 # REFERENCES
