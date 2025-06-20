@@ -1,5 +1,5 @@
 ---
-title: "Data Cleaning & EDA"
+title: "ADS 503 Group 3 Final Project"
 author: "Jimmy Hwang & Sasha Libolt"
 format: pdf
 editor: visual
@@ -28,7 +28,9 @@ rseed = 100
 ## Load Data
 
 ```{r}
-file_path <- "~/Desktop/df.XPT"
+#file can be downloaded from: https://www.cdc.gov/brfss/annual_data/2023/files/LLCP2023XPT.zip
+#file is too large for storage, you must download and update "file_path" to run
+file_path <- "/Users/sashalibolt/Desktop/df.XPT"
 brfss_orig <- read_xpt(file_path)
 ```
 
@@ -50,23 +52,23 @@ table(df_drop_24$DIABETE4, useNA = "ifany")
 
 DIABETE4 values are explained in the table below. Drop any row that is not a "1" for Yes or a "3" for No.
 
-+----------------------+----------------------------------------------------------------------+----------------------+
-| Value                | Value Label                                                          | Frequency            |
-+:====================:+:====================================================================:+:====================:+
-| 1                    | Yes                                                                  | 56,282               |
-+----------------------+----------------------------------------------------------------------+----------------------+
-| 2                    | Yes, but female told only during pregnancy - Go to Section 08.01 AGE | 3,089                |
-+----------------------+----------------------------------------------------------------------+----------------------+
-| 3                    | No - Go to Section 08.01 AGE                                         | 337,785              |
-+----------------------+----------------------------------------------------------------------+----------------------+
-| 4                    | No, pre-diabetes or borderline diabetes - Go to Section 08.01 AGE    | 9,934                |
-+----------------------+----------------------------------------------------------------------+----------------------+
-| 7                    | Don't know/Not Sure - Go to Section 08.01 AGE                        | 640                  |
-+----------------------+----------------------------------------------------------------------+----------------------+
-| 9                    | Refused - Go to Section 08.01 AGE                                    | 277                  |
-+----------------------+----------------------------------------------------------------------+----------------------+
-| BLANK                | Not asked or Missing                                                 | 5                    |
-+----------------------+----------------------------------------------------------------------+----------------------+
++--------------+----------------------------------------------------------------------+--------------+
+| Value        | Value Label                                                          | Frequency    |
++:============:+:====================================================================:+:============:+
+| 1            | Yes                                                                  | 56,282       |
++--------------+----------------------------------------------------------------------+--------------+
+| 2            | Yes, but female told only during pregnancy - Go to Section 08.01 AGE | 3,089        |
++--------------+----------------------------------------------------------------------+--------------+
+| 3            | No - Go to Section 08.01 AGE                                         | 337,785      |
++--------------+----------------------------------------------------------------------+--------------+
+| 4            | No, pre-diabetes or borderline diabetes - Go to Section 08.01 AGE    | 9,934        |
++--------------+----------------------------------------------------------------------+--------------+
+| 7            | Don't know/Not Sure - Go to Section 08.01 AGE                        | 640          |
++--------------+----------------------------------------------------------------------+--------------+
+| 9            | Refused - Go to Section 08.01 AGE                                    | 277          |
++--------------+----------------------------------------------------------------------+--------------+
+| BLANK        | Not asked or Missing                                                 | 5            |
++--------------+----------------------------------------------------------------------+--------------+
 
 ```{r}
 df_drop_diabetes <- df_drop_24 %>%
@@ -520,7 +522,7 @@ plot(density(df_child_88$CHILDREN, na.rm = TRUE), main = "Density Plot")
 ```
 
 ```{r}
-children_pivot <- as.data.frame(table(df_child_80$CHILDREN))
+children_pivot <- as.data.frame(table(df_child_88$CHILDREN))
 colnames(children_pivot) <- c("CHILDREN", "count")
 children_pivot
 ```
@@ -532,16 +534,16 @@ sum(df_child_88$CHILDREN > 10, na.rm = TRUE)
 ```
 
 ```{r}
-df_clean <- df_child_88[df_child_88$CHILDREN <= 10, ]
+df_clean_a <- df_child_88[df_child_88$CHILDREN <= 10, ]
 # Create a folder if it doesn't exist
 if (!dir.exists("data_files")) dir.create("data_files")
 
 # Save the dataframe as CSV
-write.csv(df_clean, "data_files/df_clean.csv", row.names = FALSE)
+write.csv(df_clean_a, "data_files/df_clean.csv", row.names = FALSE)
 ```
 
 ```{r}
-df_clean %>% explore()
+df_clean_a %>% explore()
 ```
 
 # DATA PRE-PROCESSING
@@ -551,9 +553,7 @@ df_clean %>% explore()
 ### Convert Outcome DIABETE4 to "Yes" or "No"
 
 ```{r}
-df_clean <- read.csv("df_clean.csv")
-
-df_clean <- df_clean %>%
+df_clean <- df_clean_a %>%
   mutate(
     DIABETE4 = case_when(
       DIABETE4 == 1 ~ "Yes",
@@ -587,17 +587,17 @@ cat_vars <- c(
   "DIFFALON",   # Difficulty being alone
   "FLUSHOT7",   # Flu shot
   "PNEUVAC4",   # Pneumonia vaccine
-  "X_IMPRACE",  # Race
-  "X_RFHLTH",   # General health risk status
-  "X_HCVU653",  # Under 65 with healthcare coverage
-  "X_PACAT3",   # Physical activity category
-  "X_RFHYPE6",  # Hypertension risk
-  "X_CHOLCH3",  # Cholesterol check status
-  "X_MICHD",    # Myocardial infarction or CHD
-  "X_ASTHMS1",  # Asthma status
-  "X_DRDXAR2",  # Arthritis diagnosis
-  "X_RFBMI5",   # BMI risk
-  "X_SMOKER3"   # Smoking status
+  "_IMPRACE",  # Race
+  "_RFHLTH",   # General health risk status
+  "_HCVU653",  # Under 65 with healthcare coverage
+  "_PACAT3",   # Physical activity category
+  "_RFHYPE6",  # Hypertension risk
+  "_CHOLCH3",  # Cholesterol check status
+  "_MICHD",    # Myocardial infarction or CHD
+  "_ASTHMS1",  # Asthma status
+  "_DRDXAR2",  # Arthritis diagnosis
+  "_RFBMI5",   # BMI risk
+  "_SMOKER3"   # Smoking status
 )
 
 df_clean[cat_vars] <- lapply(df_clean[cat_vars], factor)
@@ -608,7 +608,7 @@ df_clean[cat_vars] <- lapply(df_clean[cat_vars], factor)
 ### Check for Near Zero Variance
 
 ```{r}
-nzv <- nearZeroVar(df_clean)
+nzv <- nearZeroVar(df_clean[, setdiff(names(df_clean), "DIABETE4")])
 df_clean_nzv <- df_clean[, -nzv]
 ```
 
@@ -616,7 +616,14 @@ df_clean_nzv <- df_clean[, -nzv]
 
 ```{r}
 set.seed(rseed)
-df_sampled <- df_clean_nzv %>% sample_frac(size = 0.1, replace = FALSE)
+df_sampled <- df_clean_nzv %>%
+                  group_by(DIABETE4) %>%
+                  sample_frac(size=.10)
+```
+
+```{r}
+#check distribution of new dataset
+table(df_sampled$DIABETE4, useNA = "ifany")
 ```
 
 ### Train-Test Splitting
@@ -872,18 +879,18 @@ xgb_features <- c(
   "DIFFALON.1", "DIFFALON.2", "DIFFALON.7", "DIFFALON.9",
   "FLUSHOT7.1", "FLUSHOT7.2", "FLUSHOT7.7", "FLUSHOT7.9",
   "PNEUVAC4.1", "PNEUVAC4.2", "PNEUVAC4.7", "PNEUVAC4.9",
-  "X_IMPRACE.1", "X_IMPRACE.2", "X_IMPRACE.3", "X_IMPRACE.4", "X_IMPRACE.5", "X_IMPRACE.6",
-  "X_RFHLTH.1", "X_RFHLTH.2", "X_RFHLTH.9",
-  "X_HCVU653.1", "X_HCVU653.2", "X_HCVU653.9",
-  "X_PACAT3.1", "X_PACAT3.2", "X_PACAT3.3", "X_PACAT3.4", "X_PACAT3.9",
-  "X_RFHYPE6.1", "X_RFHYPE6.2", "X_RFHYPE6.9",
-  "X_CHOLCH3.1", "X_CHOLCH3.2", "X_CHOLCH3.3", "X_CHOLCH3.9",
-  "X_MICHD.1", "X_MICHD.2",
-  "X_ASTHMS1.1", "X_ASTHMS1.2", "X_ASTHMS1.3", "X_ASTHMS1.9",
-  "X_DRDXAR2.1", "X_DRDXAR2.2",
-  "X_AGE80",
-  "X_RFBMI5.1", "X_RFBMI5.2", "X_RFBMI5.9",
-  "X_SMOKER3.1", "X_SMOKER3.2", "X_SMOKER3.3", "X_SMOKER3.4", "X_SMOKER3.9"
+  "IMPRACE.1", "IMPRACE.2", "IMPRACE.3", "IMPRACE.4", "IMPRACE.5", "IMPRACE.6",
+  "RFHLTH.1", "RFHLTH.2", "RFHLTH.9",
+  "HCVU653.1", "HCVU653.2", "HCVU653.9",
+  "PACAT3.1", "PACAT3.2", "PACAT3.3", "PACAT3.4", "PACAT3.9",
+  "RFHYPE6.1", "RFHYPE6.2", "RFHYPE6.9",
+  "CHOLCH3.1", "CHOLCH3.2", "CHOLCH3.3", "CHOLCH3.9",
+  "MICHD.1", "MICHD.2",
+  "ASTHMS1.1", "ASTHMS1.2", "ASTHMS1.3", "ASTHMS1.9",
+  "DRDXAR2.1", "DRDXAR2.2",
+  "AGE80",
+  "RFBMI5.1", "RFBMI5.2", "RFBMI5.9",
+  "SMOKER3.1", "SMOKER3.2", "SMOKER3.3", "SMOKER3.4", "SMOKER3.9"
 )
 
 ui <- fluidPage(
@@ -1004,7 +1011,7 @@ server <- function(input, output) {
     else if (input$cholesterol == "9") newdata$X_CHOLCH3.9 <- 1
 
     # Activity
-    newdata[[paste0("X_PACAT3.", input$activity)]] <- 1
+    newdata[[paste0("PACAT3.", input$activity)]] <- 1
 
     # Difficulty walking
     newdata[[paste0("DIFFWALK.", input$diffwalk)]] <- 1
@@ -1014,7 +1021,7 @@ server <- function(input, output) {
     else newdata$X_MICHD.2 <- 1
 
     # Race/Ethnicity
-    newdata[[paste0("X_IMPRACE.", input$race)]] <- 1
+    newdata[[paste0("IMPRACE.", input$race)]] <- 1
 
     newdata
   })
@@ -1059,4 +1066,6 @@ shinyApp(ui = ui, server = server)
 
 # REFERENCES
 
-Geeks for Geeks (2024). *How to Calculate Cramer's V in R*. GeeksforGeeks. Retrieved June 4, 2025, from <https://www.geeksforgeeks.org/how-to-calculate-cramers-v-in-r/>
+Geeks for Geeks (2024a). *How to Calculate Cramer's V in R*. GeeksforGeeks. Retrieved June 4, 2025, from <https://www.geeksforgeeks.org/how-to-calculate-cramers-v-in-r/>
+
+Geeks for Geeks (2024b). *Stratified Sampling in R*. GeeksforGeeks. Retrieved June 20, 2025 from <https://www.geeksforgeeks.org/r-language/stratified-sampling-in-r/>
