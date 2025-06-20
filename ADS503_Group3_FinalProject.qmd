@@ -30,7 +30,8 @@ rseed = 100
 ```{r}
 #file can be downloaded from: https://www.cdc.gov/brfss/annual_data/2023/files/LLCP2023XPT.zip
 #file is too large for storage, you must download and update "file_path" to run
-file_path <- "/Users/sashalibolt/Desktop/df.XPT"
+# file_path <- "/Users/sashalibolt/Desktop/df.XPT"
+file_path <- "df.XPT"
 brfss_orig <- read_xpt(file_path)
 ```
 
@@ -52,23 +53,23 @@ table(df_drop_24$DIABETE4, useNA = "ifany")
 
 DIABETE4 values are explained in the table below. Drop any row that is not a "1" for Yes or a "3" for No.
 
-+--------------+----------------------------------------------------------------------+--------------+
-| Value        | Value Label                                                          | Frequency    |
-+:============:+:====================================================================:+:============:+
-| 1            | Yes                                                                  | 56,282       |
-+--------------+----------------------------------------------------------------------+--------------+
-| 2            | Yes, but female told only during pregnancy - Go to Section 08.01 AGE | 3,089        |
-+--------------+----------------------------------------------------------------------+--------------+
-| 3            | No - Go to Section 08.01 AGE                                         | 337,785      |
-+--------------+----------------------------------------------------------------------+--------------+
-| 4            | No, pre-diabetes or borderline diabetes - Go to Section 08.01 AGE    | 9,934        |
-+--------------+----------------------------------------------------------------------+--------------+
-| 7            | Don't know/Not Sure - Go to Section 08.01 AGE                        | 640          |
-+--------------+----------------------------------------------------------------------+--------------+
-| 9            | Refused - Go to Section 08.01 AGE                                    | 277          |
-+--------------+----------------------------------------------------------------------+--------------+
-| BLANK        | Not asked or Missing                                                 | 5            |
-+--------------+----------------------------------------------------------------------+--------------+
++----------------------+----------------------------------------------------------------------+----------------------+
+| Value                | Value Label                                                          | Frequency            |
++:====================:+:====================================================================:+:====================:+
+| 1                    | Yes                                                                  | 56,282               |
++----------------------+----------------------------------------------------------------------+----------------------+
+| 2                    | Yes, but female told only during pregnancy - Go to Section 08.01 AGE | 3,089                |
++----------------------+----------------------------------------------------------------------+----------------------+
+| 3                    | No - Go to Section 08.01 AGE                                         | 337,785              |
++----------------------+----------------------------------------------------------------------+----------------------+
+| 4                    | No, pre-diabetes or borderline diabetes - Go to Section 08.01 AGE    | 9,934                |
++----------------------+----------------------------------------------------------------------+----------------------+
+| 7                    | Don't know/Not Sure - Go to Section 08.01 AGE                        | 640                  |
++----------------------+----------------------------------------------------------------------+----------------------+
+| 9                    | Refused - Go to Section 08.01 AGE                                    | 277                  |
++----------------------+----------------------------------------------------------------------+----------------------+
+| BLANK                | Not asked or Missing                                                 | 5                    |
++----------------------+----------------------------------------------------------------------+----------------------+
 
 ```{r}
 df_drop_diabetes <- df_drop_24 %>%
@@ -553,54 +554,23 @@ df_clean_a %>% explore()
 ### Convert Outcome DIABETE4 to "Yes" or "No"
 
 ```{r}
-df_clean <- df_clean_a %>%
+# Add "X" in front of features that start with "_"
+names(df_clean_a) <- sub("^_", "X_", names(df_clean_a))
+```
+
+```{r}
+df_clean_a <- df_clean_a %>%
   mutate(
+    DIABETE4 = as.numeric(as.character(DIABETE4)),
     DIABETE4 = case_when(
       DIABETE4 == 1 ~ "Yes",
-      DIABETE4 == 3 ~ "No"
+      DIABETE4 == 3 ~ "No",
+      TRUE ~ NA_character_
     )
   )
 
 # Make DIABETE4 variable a factor
-df_clean$DIABETE4 <- factor(df_clean$DIABETE4, levels = c("No", "Yes"))
-```
-
-### Convert Appropriate Predictors to Factors
-
-```{r}
-cat_vars <- c(
-  "PERSDOC3",   # Personal doctor - Yes/No
-  "CHECKUP1",   # Time since last routine checkup
-  "CVDSTRK3",   # Ever told you had a stroke
-  "CHCOCNC1",   # Ever had any type of cancer
-  "CHCCOPD3",   # Ever told you had COPD
-  "CHCKDNY2",   # Ever told you had kidney disease
-  "MARITAL",    # Marital status
-  "EDUCA",      # Education level
-  "VETERAN3",   # Veteran status
-  "EMPLOY1",    # Employment status
-  "DEAF",       # Deaf/hard of hearing
-  "BLIND",      # Blind/difficulty seeing
-  "DECIDE",     # Difficulty making decisions
-  "DIFFWALK",   # Difficulty walking
-  "DIFFDRES",   # Difficulty dressing
-  "DIFFALON",   # Difficulty being alone
-  "FLUSHOT7",   # Flu shot
-  "PNEUVAC4",   # Pneumonia vaccine
-  "_IMPRACE",  # Race
-  "_RFHLTH",   # General health risk status
-  "_HCVU653",  # Under 65 with healthcare coverage
-  "_PACAT3",   # Physical activity category
-  "_RFHYPE6",  # Hypertension risk
-  "_CHOLCH3",  # Cholesterol check status
-  "_MICHD",    # Myocardial infarction or CHD
-  "_ASTHMS1",  # Asthma status
-  "_DRDXAR2",  # Arthritis diagnosis
-  "_RFBMI5",   # BMI risk
-  "_SMOKER3"   # Smoking status
-)
-
-df_clean[cat_vars] <- lapply(df_clean[cat_vars], factor)
+df_clean_a$DIABETE4 <- factor(df_clean_a$DIABETE4, levels = c("No", "Yes"))
 ```
 
 ## Modeling Preparation
@@ -608,8 +578,8 @@ df_clean[cat_vars] <- lapply(df_clean[cat_vars], factor)
 ### Check for Near Zero Variance
 
 ```{r}
-nzv <- nearZeroVar(df_clean[, setdiff(names(df_clean), "DIABETE4")])
-df_clean_nzv <- df_clean[, -nzv]
+nzv <- nearZeroVar(df_clean_a[, setdiff(names(df_clean_a), "DIABETE4")])
+df_clean_nzv <- df_clean_a[, -nzv]
 ```
 
 ### Stratified Sampling for Large Data Set
@@ -618,7 +588,7 @@ df_clean_nzv <- df_clean[, -nzv]
 set.seed(rseed)
 df_sampled <- df_clean_nzv %>%
                   group_by(DIABETE4) %>%
-                  sample_frac(size=.10)
+                  sample_frac(size = 0.10)
 ```
 
 ```{r}
@@ -715,10 +685,11 @@ varImp(plrFit)
 ```{r}
 set.seed(rseed)
 
+trainX_df <- as.data.frame(trainX)
 mtryValues = 4
 
 rfFit <- train(
-  x = trainX,
+  x = trainX_df,
   y = trainY,
   method = "rf",
   ntree = 500,
@@ -851,6 +822,7 @@ train_metrics <- resamples(list(
   XGB = xgbFit,
   NN = nnFit
 ))
+
 dotplot(train_metrics, metric = "ROC", main = "Confidence Intervals for Repeated CV")
 ```
 
@@ -863,6 +835,10 @@ plot(varImp(xgbFit), top = 10, main = "XGBoost Top 10 Important Variables")
 # RShiny App (XGBoost Model)
 
 ```{r}
+colnames(trainX_dummies)
+```
+
+```{r}
 # Used ChatGPT on 6/18/25 to understand code structure of rshiny
 xgb_features <- c(
   "PHYSHLTH", "PERSDOC3.1", "PERSDOC3.2", "PERSDOC3.3", "PERSDOC3.7", "PERSDOC3.9",
@@ -872,25 +848,24 @@ xgb_features <- c(
   "MARITAL.1", "MARITAL.2", "MARITAL.3", "MARITAL.4", "MARITAL.5", "MARITAL.6", "MARITAL.9",
   "EDUCA.1", "EDUCA.2", "EDUCA.3", "EDUCA.4", "EDUCA.5", "EDUCA.6", "EDUCA.9",
   "VETERAN3.1", "VETERAN3.2", "VETERAN3.7", "VETERAN3.9",
-  "EMPLOY1.1", "EMPLOY1.2", "EMPLOY1.3", "EMPLOY1.4", "EMPLOY1.5", "EMPLOY1.6", "EMPLOY1.7", "EMPLOY1.8", "EMPLOY1.9",
-  "DEAF.1", "DEAF.2", "DEAF.7", "DEAF.9",
+  "CHILDREN", "BLIND.1", "BLIND.2", "BLIND.7", "BLIND.9",
   "DECIDE.1", "DECIDE.2", "DECIDE.7", "DECIDE.9",
-  "DIFFWALK.1", "DIFFWALK.2", "DIFFWALK.7", "DIFFWALK.9",
+  "DIFFDRES.1", "DIFFDRES.2", "DIFFDRES.7", "DIFFDRES.9",
   "DIFFALON.1", "DIFFALON.2", "DIFFALON.7", "DIFFALON.9",
   "FLUSHOT7.1", "FLUSHOT7.2", "FLUSHOT7.7", "FLUSHOT7.9",
   "PNEUVAC4.1", "PNEUVAC4.2", "PNEUVAC4.7", "PNEUVAC4.9",
-  "IMPRACE.1", "IMPRACE.2", "IMPRACE.3", "IMPRACE.4", "IMPRACE.5", "IMPRACE.6",
-  "RFHLTH.1", "RFHLTH.2", "RFHLTH.9",
-  "HCVU653.1", "HCVU653.2", "HCVU653.9",
-  "PACAT3.1", "PACAT3.2", "PACAT3.3", "PACAT3.4", "PACAT3.9",
-  "RFHYPE6.1", "RFHYPE6.2", "RFHYPE6.9",
-  "CHOLCH3.1", "CHOLCH3.2", "CHOLCH3.3", "CHOLCH3.9",
-  "MICHD.1", "MICHD.2",
-  "ASTHMS1.1", "ASTHMS1.2", "ASTHMS1.3", "ASTHMS1.9",
-  "DRDXAR2.1", "DRDXAR2.2",
-  "AGE80",
-  "RFBMI5.1", "RFBMI5.2", "RFBMI5.9",
-  "SMOKER3.1", "SMOKER3.2", "SMOKER3.3", "SMOKER3.4", "SMOKER3.9"
+  "X_IMPRACE.1", "X_IMPRACE.2", "X_IMPRACE.3", "X_IMPRACE.4", "X_IMPRACE.5", "X_IMPRACE.6",
+  "X_RFHLTH.1", "X_RFHLTH.2", "X_RFHLTH.9",
+  "X_HCVU653.1", "X_HCVU653.2", "X_HCVU653.9",
+  "X_PACAT3.1", "X_PACAT3.2", "X_PACAT3.3", "X_PACAT3.4", "X_PACAT3.9",
+  "X_RFHYPE6.1", "X_RFHYPE6.2", "X_RFHYPE6.9",
+  "X_CHOLCH3.1", "X_CHOLCH3.2", "X_CHOLCH3.3", "X_CHOLCH3.9",
+  "X_MICHD.1", "X_MICHD.2",
+  "X_ASTHMS1.1", "X_ASTHMS1.2", "X_ASTHMS1.3", "X_ASTHMS1.9",
+  "X_DRDXAR2.1", "X_DRDXAR2.2",
+  "X_AGE80",
+  "X_RFBMI5.1", "X_RFBMI5.2", "X_RFBMI5.9",
+  "X_SMOKER3.1", "X_SMOKER3.2", "X_SMOKER3.3", "X_SMOKER3.4", "X_SMOKER3.9"
 )
 
 ui <- fluidPage(
@@ -1011,7 +986,7 @@ server <- function(input, output) {
     else if (input$cholesterol == "9") newdata$X_CHOLCH3.9 <- 1
 
     # Activity
-    newdata[[paste0("PACAT3.", input$activity)]] <- 1
+    newdata[[paste0("X_PACAT3.", input$activity)]] <- 1
 
     # Difficulty walking
     newdata[[paste0("DIFFWALK.", input$diffwalk)]] <- 1
@@ -1021,7 +996,7 @@ server <- function(input, output) {
     else newdata$X_MICHD.2 <- 1
 
     # Race/Ethnicity
-    newdata[[paste0("IMPRACE.", input$race)]] <- 1
+    newdata[[paste0("X_IMPRACE.", input$race)]] <- 1
 
     newdata
   })
