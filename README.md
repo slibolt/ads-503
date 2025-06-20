@@ -1,4 +1,4 @@
-# ads-503
+# ADS 503, University of San Diego
 Course: Applied Predictive Modeling (ADS-503-01)
 Professor: Ebrahim Tarshizi
 
