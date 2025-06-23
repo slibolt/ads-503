@@ -812,6 +812,58 @@ legend("bottomright",
 title(main = "ROC Curves from Different Models", outer = TRUE)
 ```
 
+## Confusion Matrix
+
+```{r}
+lr_preds <- predict(lrFit, newdata = testX_trans)
+lr_cm <- confusionMatrix(lr_preds, testY, positive = "Yes")
+
+plr_preds <- predict(plrFit, newdata = testX_trans)
+plr_cm <- confusionMatrix(plr_preds, testY, positive = "Yes")
+
+testX_df <- as.data.frame(testX)
+rf_preds <- predict(rfFit, newdata = testX_df)
+rf_cm <- confusionMatrix(rf_preds, testY, positive = "Yes")
+
+xgb_preds <- predict(xgbFit, newdata = testX_dummies)
+xgb_cm <- confusionMatrix(xgb_preds, testY, positive = "Yes")
+
+nn_preds <- predict(nnFit, newdata = testX_trans)
+nn_cm <- confusionMatrix(nn_preds, testY, positive = "Yes")
+
+lr_table   <- lr_cm$table
+plr_table  <- plr_cm$table
+rf_table   <- rf_cm$table
+xgb_table  <- xgb_cm$table
+nn_table   <- nn_cm$table
+
+cm_results <- data.frame(
+  Model = c("LR", "PLR", "RF", "XGB", "NN"),
+  
+  FPR = c(
+    lr_table["Yes", "No"] / (lr_table["Yes", "No"] + lr_table["No", "No"]),
+    plr_table["Yes", "No"] / (plr_table["Yes", "No"] + plr_table["No", "No"]),
+    rf_table["Yes", "No"] / (rf_table["Yes", "No"] + rf_table["No", "No"]),
+    xgb_table["Yes", "No"] / (xgb_table["Yes", "No"] + xgb_table["No", "No"]),
+    nn_table["Yes", "No"] / (nn_table["Yes", "No"] + nn_table["No", "No"])
+  ),
+  
+  FNR = c(
+    lr_table["No", "Yes"] / (lr_table["No", "Yes"] + lr_table["Yes", "Yes"]),
+    plr_table["No", "Yes"] / (plr_table["No", "Yes"] + plr_table["Yes", "Yes"]),
+    rf_table["No", "Yes"] / (rf_table["No", "Yes"] + rf_table["Yes", "Yes"]),
+    xgb_table["No", "Yes"] / (xgb_table["No", "Yes"] + xgb_table["Yes", "Yes"]),
+    nn_table["No", "Yes"] / (nn_table["No", "Yes"] + nn_table["Yes", "Yes"])
+  )
+)
+
+# Round for easier reading
+cm_results$FPR <- round(cm_results$FPR, 4)
+cm_results$FNR <- round(cm_results$FNR, 4)
+
+cm_results
+```
+
 ## Confidence Intervals for Cross-Validation
 
 ```{r}
